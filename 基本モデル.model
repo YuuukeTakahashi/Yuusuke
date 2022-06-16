@@ -1,0 +1,930 @@
+//====================================================================/
+//　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　/
+// artisoc                                                            /
+//                                                                    /
+//====================================================================/
+
+Version = 4.0;
+
+
+
+//-------------------------------------------------------
+// Component Tree
+//-------------------------------------------------------
+UNIVERSE {
+    Space 土地(0,0),Square_2D(20, 20, Loop, North, 1, !Map_3D){
+        AgtType 世帯(0, 0)[0] {
+            Dim ID(0, 0) As Integer = (0);
+            Dim X(0, 0) As Double = (0.0);
+            Dim Y(0, 0) As Double = (0.0);
+            Dim Layer(0, 0) As Integer = (0);
+            Dim Direction(0, 0) As Double = (0.0);
+        }
+        AgtType 住宅状態(0, 0)[0] {
+            Dim ID(0, 0) As Integer = (0);
+            Dim X(0, 0) As Double = (0.0);
+            Dim Y(0, 0) As Double = (0.0);
+            Dim Layer(0, 0) As Integer = (0);
+            Dim Direction(0, 0) As Double = (0.0);
+            Dim 人数(0, 0) As Integer = (0);
+            Dim 評価(0, 0) As Double = (0.0);
+            Dim 中古(0, 0) As Boolean = (0);
+            Dim 順番(0, 0) As Double = (0.0);
+        }
+        AgtType 中古表示(0, 0)[0] {
+            Dim ID(0, 0) As Integer = (0);
+            Dim X(0, 0) As Double = (0.0);
+            Dim Y(0, 0) As Double = (0.0);
+            Dim Layer(0, 0) As Integer = (0);
+            Dim Direction(0, 0) As Double = (0.0);
+        }
+    }
+    Dim 初期世帯数(0, 0) As Integer = (0);
+    Dim 世帯群(0, 0) As AgtSet = ();
+    Dim 住宅状態群(0, 0) As AgtSet = ();
+    Dim 増加量(0, 0) As Integer = (0);
+    Dim 中古住宅マイナス(0, 0) As Double = (0.0);
+    Dim 移動量(0, 0) As Integer = (0);
+    Dim 総距離カウント(0, 0) As Integer = (0);
+    Dim 上(0, 0) As Integer = (0);
+    Dim 周長(0, 0) As Double = (0.0);
+    Dim 周長マイナス(0, 0) As Integer = (0);
+    Dim 中古世帯重複(0, 0) As Integer = (0);
+}
+
+
+//-------------------------------------------------------
+// Agent Variable Initial Data
+//-------------------------------------------------------
+Initial_Value {
+    UNIVERSE.初期世帯数 = 1(1);
+    UNIVERSE.増加量 = 1(1);
+    UNIVERSE.中古住宅マイナス = 1(0.0);
+    UNIVERSE.移動量 = 1(1);
+    UNIVERSE.上 = 1(1);
+    UNIVERSE.周長 = 1(0.0);
+}
+
+
+//-------------------------------------------------------
+// Agent Rule
+//-------------------------------------------------------
+#begin_rule UNIVERSE
+Univ_Init{
+//変数設定
+Dim i as integer
+Dim j as integer
+Dim count as integer
+Dim obj as agt
+Dim obj2 as agt
+Dim objs as agtset
+Dim 住宅条件 as Boolean
+
+//初期化
+Universe.総距離カウント = 0
+
+//住宅状態エージェント設定
+for i = 0 to GetWidthSpace(Universe.土地) - 1
+ for j = 0 to GetHeightSpace(Universe.土地) - 1
+	obj = CreateAgt(Universe.土地.住宅状態)
+	obj.x = i
+	obj.y = j
+	obj.人数 = 0
+	obj.中古 = False
+	obj.評価 = 0
+	obj.順番 = Rnd()
+ next j
+next i
+
+//世帯エージェント生成
+For i = 0 to Universe.初期世帯数 -1
+ obj = createagt(Universe.土地.世帯)
+ 住宅条件 = False
+ Do until 住宅条件 == True
+  obj.X=int(Rnd()*Getheightspace(Universe.土地))
+  obj.Y=int(Rnd()*Getwidthspace(Universe.土地))
+  MakeOneAgtSetAroundPositionCell(objs,Universe.土地,obj.x,obj.y,0,0,Universe.土地.世帯)
+  If Countagtset(objs) == 1  then
+   住宅条件 = True
+  End if
+ Loop
+Next i
+
+//家用
+//OpenFileCsv("C:\Users\Takahashi Yuusuke\Desktop\基本\分散1マイナス"&Universe.中古住宅マイナス&Getheightspace(Universe.土地)&".csv",1,2)
+//OpenFileCsv("C:\Users\Takahashi Yuusuke\Desktop\基本\分散2マイナス"&Universe.中古住宅マイナス&Getheightspace(Universe.土地)&".csv",2,2)
+//OpenFileCsv("C:\Users\Takahashi Yuusuke\Desktop\基本\分散3マイナス"&Universe.中古住宅マイナス&Getheightspace(Universe.土地)&".csv",3,2)
+}
+
+Univ_Step_Begin{
+
+//変数設定
+Dim i as integer
+Dim j as integer
+Dim count as integer
+Dim obj as agt
+Dim obj2 as agt
+Dim obj3 as agt
+Dim objs as agtset
+Dim 住宅条件 as Boolean
+
+//初期化
+Universe.総距離カウント = 0
+Universe.周長 = 0
+Universe.周長マイナス=0
+Universe.中古世帯重複 = 0
+
+//セット設定
+ //世帯セット
+ MakeAgtSet(Universe.世帯群,Universe.土地.世帯)
+ //住宅状態セット
+ MakeAgtSet(Universe.住宅状態群,Universe.土地.住宅状態)
+
+For each obj in Universe.住宅状態群
+ obj.評価 =0
+Next obj
+
+//評価
+For each obj in Universe.住宅状態群
+ obj.評価 =0
+ For each obj2 in Universe.世帯群
+ If obj.x<>obj2.x or obj.y <> obj2.y then
+   obj.評価 = obj.評価+1/(abs(obj2.x-obj.x)+abs(obj2.y-obj.y))/(abs(obj2.x-obj.x)+abs(obj2.y-obj.y))
+ Else
+  obj.評価 = obj.評価+1
+ End if
+ Next obj2
+ If obj.中古 == true then
+  obj.評価 = obj.評価- Universe.中古住宅マイナス
+ End if
+Next obj
+
+//世帯増やす
+Sortagtset(Universe.住宅状態群,"順番",false)
+Sortagtset(Universe.住宅状態群,"評価",false)
+For i = 0 to Universe.増加量-1
+ j = 0
+ obj = createagt(Universe.土地.世帯)
+ 住宅条件 = False
+ Do until 住宅条件 == True
+  obj2 = Getagt(Universe.住宅状態群,i+j)
+  obj.x = obj2.x
+  obj.y = obj2.y
+  MakeOneAgtSetAroundPositionCell(objs,Universe.土地,obj.x,obj.y,0,0,Universe.土地.世帯)
+  If Countagtset(objs) <= Universe.上 then
+   住宅条件 = True
+  End if
+  j= j+1
+ Loop
+Next i
+
+//世帯動かす
+Sortagtset(Universe.住宅状態群,"順番",false)
+Sortagtset(Universe.住宅状態群,"評価",false)
+For i = 0 to Universe.移動量 -1
+obj = Getagt(Universe.世帯群,int(Rnd()*CountAgtset(Universe.世帯群)))
+ j = 0
+ 住宅条件 = False
+ Do Until 住宅条件 == true
+  obj2 = Getagt(Universe.住宅状態群,i+j)
+  MakeOneAgtSetAroundPositionCell(objs,Universe.土地,obj2.x,obj2.y,0,0,Universe.土地.世帯)
+  If Countagtset(objs) <= Universe.上 -1 then
+   住宅条件 = True
+   MakeOneAgtSetAroundPositionCell(objs,Universe.土地,obj.x,obj.y,0,0,Universe.土地.住宅状態)
+   obj3 = Getagt(objs,0)
+   obj3.中古 = true
+  End if
+  j = j + 1
+ Loop
+ obj.x = obj2.x
+ obj.y = obj2.y
+Next i 
+}
+
+Univ_Step_End{
+dim obj as agt
+dim objs as agtset
+dim objs2 as agtset
+//周長集計
+Universe.周長 = Universe.周長+countaliveagt(Universe.土地.世帯)*4
+//家用
+/*
+WriteFileCsv(1,Countagt(Universe.土地.世帯)/(Countagt(Universe.土地.中古表示)+Countagt(Universe.土地.世帯)-Universe.中古世帯重複),false)
+WriteFileCsv(2,(Countagt(Universe.土地.世帯)*32)/((Universe.周長)^2),False)
+if getcountstep()==0 or getcountstep() == 1 then
+WriteFileCsv(3,0,false)
+else
+WriteFileCsv(3,(Universe.総距離カウント/(CountAgt(Universe.土地.世帯)^2))/((7*sqr(2)*sqr(countagt(Universe.土地.世帯)))/15),False)
+End if
+if getcountstep() == 100 or getcountstep() == 200 or getcountstep() ==300 then 
+Screenshotpng("土地","C:\Users\Takahashi Yuusuke\Desktop\基本\マイナス"&Universe.中古住宅マイナス&Getcountstep()&".png")
+End if
+*/
+}
+
+Univ_Finish{
+//CloseFileCsv(1)
+//CloseFileCsv(2)
+//CloseFileCsv(3)
+If GetCountStep()==300 then
+End if
+}
+#end_rule UNIVERSE
+
+
+
+
+//-------------------------------------------------------
+// Agent Rule
+//-------------------------------------------------------
+#begin_rule UNIVERSE.土地.世帯
+Agt_Init{
+
+}
+
+Agt_Step{
+Dim objs as agtset
+Dim obj as agt
+Dim obj2 as agt
+
+makeagtset(objs,Universe.土地.世帯)
+
+Delagtset2(objs,my)
+For each obj in objs
+ Universe.総距離カウント = Universe.総距離カウント + Abs(obj.x-my.x)+Abs(obj.y-my.y)
+Next obj
+
+//周長の計算
+//右
+MakeOneAgtSetAroundPositionCell(objs,universe.土地,my.x+1,my.y,0,0,Universe.土地.世帯)
+If countagtset(objs) >0 then
+ obj=getagt(objs,0)
+ Universe.周長 = Universe.周長 - 1
+End if
+
+//左
+ MakeOneAgtSetAroundPositionCell(objs,universe.土地,my.x-1,my.y,0,0,Universe.土地.世帯)
+If countagtset(objs) >0 then
+ obj=getagt(objs,0)
+ Universe.周長 = Universe.周長 - 1
+End if
+
+//上
+ Makeoneagtsetaroundpositioncell(objs,universe.土地,my.x,my.y+1,0,0,Universe.土地.世帯)
+If countagtset(objs) >0 then
+ obj=getagt(objs,0)
+ Universe.周長 = Universe.周長 - 1
+End if
+
+//下
+ Makeoneagtsetaroundpositioncell(objs,universe.土地,my.x,my.y-1,0,0,Universe.土地.世帯)
+If countagtset(objs) >0 then
+ obj=getagt(objs,0)
+ Universe.周長 = Universe.周長 - 1
+End if
+
+}
+#end_rule UNIVERSE.土地.世帯
+
+
+
+
+//-------------------------------------------------------
+// Agent Rule
+//-------------------------------------------------------
+#begin_rule UNIVERSE.土地.住宅状態
+Agt_Init{
+
+}
+
+Agt_Step{
+Dim objs as agtset
+dim objs2 as agtset
+Dim obj as agt
+Dim count as Integer
+count = 0
+//中古表示エージェント生成
+MakeOneAgtSetAroundPositionCell(objs,universe.土地,my.x,my.y,0,0,Universe.土地.中古表示)
+my.人数 = 0
+If my.中古 == true and Countagtset(objs) ==0 then
+ obj = Createagt(Universe.土地.中古表示)
+ obj.x = my.x
+ obj.y = my.y
+End if
+
+//人数カウント
+MakeOneAgtSetAroundPositionCell(objs,universe.土地,my.x,my.y,0,0,Universe.土地.世帯)
+my.人数 = countagtset(objs)
+
+}
+#end_rule UNIVERSE.土地.住宅状態
+
+
+
+
+//-------------------------------------------------------
+// Agent Rule
+//-------------------------------------------------------
+#begin_rule UNIVERSE.土地.中古表示
+Agt_Init{
+
+
+}
+
+Agt_Step{
+Dim obj as agt
+Dim objs as agtset
+MakeOneAgtSetAroundPositionCell(objs,Universe.土地,my.X,my.y,0,0,Universe.土地.世帯)
+If countagtset(objs)>=1 then
+ Universe.中古世帯重複=Universe.中古世帯重複+1
+End if
+}
+#end_rule UNIVERSE.土地.中古表示
+
+
+
+
+//-------------------------------------------------------
+// Simulation Definition Division
+//-------------------------------------------------------
+Single_Simulation {
+    Step_Max = 300;
+    Time_Max = 0;
+    End_Condition = "";
+    Exec_Wait = 0;
+    Exec_Wait_Max = 1000;
+    Random_Generator = Java_Standard;
+    Exec_Order = Component;
+    Exec_Order_Random_First_Step_Only = No;
+    Random_Seed = 0;
+    Redraw_Timing = Step;
+    Redraw_Interval = 1;
+    Garbage_Interval = 0;
+}
+
+
+//-------------------------------------------------------
+// Simulation Loop Definition Division
+//-------------------------------------------------------
+Repeat_Simulation {
+    Value_Change = None;
+    Initial_Value_Change_None {
+        Repeat_Max = 1;
+    }
+}
+
+
+//-------------------------------------------------------
+// Executing Order By Agent Component Definition Division
+//-------------------------------------------------------
+Executing_Order_Component {
+    Component_Priority = "Universe.土地.世帯", 1;
+    Component_Priority = "Universe.土地.住宅状態", 2;
+    Component_Priority = "Universe.土地.中古表示", 3;
+}
+
+
+//-------------------------------------------------------
+// 2 Dimension Map Display Definition Division
+//-------------------------------------------------------
+Map_Output {
+    Map_Space_Name = "Universe.土地";
+    Map_Name = "土地";
+    Title = "土地";
+    Disable = No;
+    Background_Color = 204, 204, 204;
+    Position_x = 1077;
+    Position_y = 170;
+    Size_x = 793;
+    Size_y = 852;
+    Map_Cell_Size = 4;
+    Remarks = Yes;
+    Legend_Pos = Top;
+    Font_Name = "Dialog";
+    Font_Char_Set = 81;
+    Font_Size = 12.0;
+    Font_Style = 0;
+    Font_Color = 0, 0, 0;
+    Font_Background_Color = 255, 255, 255;
+    FastDraw = Yes;
+    Draw_Timing = Simulation_Step;
+    Draw_Interval = 100;
+    Axis_Label = "", "";
+    Draw_Range = 0, 0, 20, 20;
+    Ruled_Line = Yes;
+    Text_Display = No;
+    Text_Display_Variable_Name = "";
+    Chess_Type_Display_Position = Yes;
+    Background_Transparent = No;
+    Target_Layer = 0;
+    Coordinate_Display = No;
+    Space_Kind = Square_2D;
+    BG_Pict = No;
+    BG_Type = 0;
+    BG_Var_Name = "";
+    BG_File_Name = "";
+    Origin_Position = 2;
+    Output_Group_Name = "";
+    Output {
+        Map_Element_Name = "住宅";
+        Map_Element = Agent_Variable;
+        Output_Expression = "Universe.土地.住宅状態";
+        Draw_Line = No;
+        Collection_Name = "";
+        Line_Type = 0;
+        Line_Arrow = 0;
+        Line_Width = 0;
+        Line_Color = 0, 0, 0;
+        Line_Type_Variable = "";
+        Line_Arrow_Variable = "";
+        Line_Width_Variable = "";
+        Line_Color_Variable = "";
+        Agent_Color = 0,0,0;
+        Marker_Id = 1;
+        Effective_Figures = 1;
+        Format_Id = 0;
+        Agent_Image_Direction = No;
+        Icon_Type = 0;
+        Icon_Var_Name = "";
+        Icon_Transparent = No;
+        Icon_Enlarg_Reduce = No;
+        Icon_File_Name = "";
+        Num_Display = Yes;
+        Num_Var_Name = "Universe.土地.住宅状態.人数";
+        Agent_Image_Magnify_by_value = Yes;
+        Agent_Image_Magnify_Value = 1.0;
+        Agent_Image_Magnify_Variable_Name = "Universe.土地.住宅状態.ID";
+        Agent_Image_Transparency_by_value = Yes;
+        Agent_Image_Transparency_Value = 100.0;
+        Agent_Image_Transparency_Variable_Name = "Universe.土地.住宅状態.ID";
+    }
+    Output {
+        Map_Element_Name = "世帯";
+        Map_Element = Agent_Variable;
+        Output_Expression = "Universe.土地.世帯";
+        Draw_Line = No;
+        Collection_Name = "";
+        Line_Type = 0;
+        Line_Arrow = 0;
+        Line_Width = 0;
+        Line_Color = 0, 0, 0;
+        Line_Type_Variable = "";
+        Line_Arrow_Variable = "";
+        Line_Width_Variable = "";
+        Line_Color_Variable = "";
+        Agent_Color = 204,255,0;
+        Marker_Id = 1;
+        Effective_Figures = 0;
+        Format_Id = 0;
+        Agent_Image_Direction = No;
+        Icon_Type = 0;
+        Icon_Var_Name = "";
+        Icon_Transparent = No;
+        Icon_Enlarg_Reduce = No;
+        Icon_File_Name = "";
+        Num_Display = No;
+        Num_Var_Name = "";
+        Agent_Image_Magnify_by_value = Yes;
+        Agent_Image_Magnify_Value = 1.0;
+        Agent_Image_Magnify_Variable_Name = "Universe.土地.世帯.ID";
+        Agent_Image_Transparency_by_value = Yes;
+        Agent_Image_Transparency_Value = 0.0;
+        Agent_Image_Transparency_Variable_Name = "Universe.土地.世帯.ID";
+    }
+    Output {
+        Map_Element_Name = "中古住宅";
+        Map_Element = Agent_Variable;
+        Output_Expression = "Universe.土地.中古表示";
+        Draw_Line = No;
+        Collection_Name = "";
+        Line_Type = 0;
+        Line_Arrow = 0;
+        Line_Width = 0;
+        Line_Color = 0, 0, 0;
+        Line_Type_Variable = "";
+        Line_Arrow_Variable = "";
+        Line_Width_Variable = "";
+        Line_Color_Variable = "";
+        Agent_Color = 102,102,102;
+        Marker_Id = 2;
+        Effective_Figures = 0;
+        Format_Id = 0;
+        Agent_Image_Direction = No;
+        Icon_Type = 0;
+        Icon_Var_Name = "";
+        Icon_Transparent = No;
+        Icon_Enlarg_Reduce = No;
+        Icon_File_Name = "";
+        Num_Display = No;
+        Num_Var_Name = "";
+        Agent_Image_Magnify_by_value = Yes;
+        Agent_Image_Magnify_Value = 1.0;
+        Agent_Image_Magnify_Variable_Name = "Universe.土地.中古表示.ID";
+        Agent_Image_Transparency_by_value = Yes;
+        Agent_Image_Transparency_Value = 0.0;
+        Agent_Image_Transparency_Variable_Name = "Universe.土地.中古表示.ID";
+    }
+}
+
+
+//-------------------------------------------------------
+// 2 Dimension Map Display Definition Division
+//-------------------------------------------------------
+Map_Output {
+    Map_Space_Name = "Universe.土地";
+    Map_Name = "住宅状態";
+    Title = "住宅状態";
+    Disable = Yes;
+    Background_Color = 255, 255, 255;
+    Position_x = 12;
+    Position_y = 138;
+    Size_x = 528;
+    Size_y = 635;
+    Map_Cell_Size = 11;
+    Remarks = Yes;
+    Legend_Pos = Top;
+    Font_Name = "Dialog";
+    Font_Char_Set = 81;
+    Font_Size = 12.0;
+    Font_Style = 0;
+    Font_Color = 0, 0, 0;
+    Font_Background_Color = 255, 255, 255;
+    FastDraw = Yes;
+    Draw_Timing = Simulation_Step;
+    Draw_Interval = 1;
+    Axis_Label = "", "";
+    Draw_Range = 0, 0, 20, 20;
+    Ruled_Line = No;
+    Text_Display = No;
+    Text_Display_Variable_Name = "";
+    Chess_Type_Display_Position = Yes;
+    Background_Transparent = No;
+    Target_Layer = 0;
+    Coordinate_Display = No;
+    Space_Kind = Square_2D;
+    BG_Pict = No;
+    BG_Type = 0;
+    BG_Var_Name = "";
+    BG_File_Name = "";
+    Origin_Position = 2;
+    Output_Group_Name = "";
+    Output {
+        Map_Element_Name = "住宅状態";
+        Map_Element = Agent_Variable;
+        Output_Expression = "Universe.土地.住宅状態";
+        Draw_Line = No;
+        Collection_Name = "";
+        Line_Type = 0;
+        Line_Arrow = 0;
+        Line_Width = 0;
+        Line_Color = 0, 0, 0;
+        Line_Type_Variable = "";
+        Line_Arrow_Variable = "";
+        Line_Width_Variable = "";
+        Line_Color_Variable = "";
+        Agent_Color = 255,0,255;
+        Marker_Id = 1;
+        Effective_Figures = 0;
+        Format_Id = 0;
+        Agent_Image_Direction = No;
+        Icon_Type = 0;
+        Icon_Var_Name = "";
+        Icon_Transparent = No;
+        Icon_Enlarg_Reduce = No;
+        Icon_File_Name = "";
+        Num_Display = Yes;
+        Num_Var_Name = "Universe.土地.住宅状態.評価";
+        Agent_Image_Magnify_by_value = Yes;
+        Agent_Image_Magnify_Value = 1.0;
+        Agent_Image_Magnify_Variable_Name = "Universe.土地.住宅状態.ID";
+        Agent_Image_Transparency_by_value = Yes;
+        Agent_Image_Transparency_Value = 0.0;
+        Agent_Image_Transparency_Variable_Name = "Universe.土地.住宅状態.ID";
+    }
+}
+
+
+//-------------------------------------------------------
+// Time Graph Output Definition Division
+//-------------------------------------------------------
+Time_Graph {
+    Font_Name = "Dialog";
+    Font_Char_Set = 81;
+    Font_Size = 12.0;
+    Font_Style = 0;
+    Font_Color = 0, 0, 0;
+    Font_Background_Color = 255, 255, 255;
+    Draw_Timing = Simulation_Step;
+    Draw_Interval = 1;
+    Graph_Name = "世帯間総距離";
+    Title = "世帯間総距離";
+    Disable = Yes;
+    Background_Color = 255, 255, 255;
+    Remarks = Yes;
+    Legend_Pos = Top;
+    FastDraw = No;
+    Position_x = -54;
+    Position_y = 314;
+    Size_x = 789;
+    Size_y = 824;
+    Map_Cell_Size = -1;
+    Axis_Label = "", "";
+    Draw_By_JFree_Chart = Yes;
+    Scale = 0, 0.0, 1000, 5000.0, 100, 500.0;
+    ScaleAuto = Yes, No;
+    Output_Group_Name = "";
+    Output {
+        Graph_Element_Name = "総距離カウント";
+        Line_Color = 0, 0, 255;
+        Line_Width = 2;
+        Marker_Id = 0;
+        Output_Expression = "Universe.総距離カウント/Countagtset(Universe.世帯群)";
+        Expression_Value_Display = No;
+        Effective_Fraction_Figures = 0;
+        Graph_Element_Color = (0, 255, 0);
+    }
+}
+
+
+//-------------------------------------------------------
+// 2 Dimension Map Display Definition Division
+//-------------------------------------------------------
+Map_Output {
+    Map_Space_Name = "Universe.土地";
+    Map_Name = "まとまり";
+    Title = "まとまり";
+    Disable = Yes;
+    Background_Color = 255, 255, 255;
+    Position_x = 154;
+    Position_y = 418;
+    Size_x = 500;
+    Size_y = 300;
+    Map_Cell_Size = 11;
+    Remarks = Yes;
+    Legend_Pos = Top;
+    Font_Name = "Dialog";
+    Font_Char_Set = 81;
+    Font_Size = 12.0;
+    Font_Style = 0;
+    Font_Color = 0, 0, 0;
+    Font_Background_Color = 255, 255, 255;
+    FastDraw = Yes;
+    Draw_Timing = Simulation_Step;
+    Draw_Interval = 1;
+    Axis_Label = "", "";
+    Draw_Range = 0, 0, 20, 20;
+    Ruled_Line = No;
+    Text_Display = No;
+    Text_Display_Variable_Name = "";
+    Chess_Type_Display_Position = Yes;
+    Background_Transparent = No;
+    Target_Layer = 0;
+    Coordinate_Display = No;
+    Space_Kind = Square_2D;
+    BG_Pict = No;
+    BG_Type = 0;
+    BG_Var_Name = "";
+    BG_File_Name = "";
+    Origin_Position = 2;
+    Output_Group_Name = "";
+}
+
+
+//-------------------------------------------------------
+// Time Graph Output Definition Division
+//-------------------------------------------------------
+Time_Graph {
+    Font_Name = "Dialog";
+    Font_Char_Set = 81;
+    Font_Size = 12.0;
+    Font_Style = 0;
+    Font_Color = 0, 0, 0;
+    Font_Background_Color = 255, 255, 255;
+    Draw_Timing = Simulation_Step;
+    Draw_Interval = 1;
+    Graph_Name = "周長";
+    Title = "周長";
+    Disable = Yes;
+    Background_Color = 255, 255, 255;
+    Remarks = Yes;
+    Legend_Pos = Top;
+    FastDraw = No;
+    Position_x = 354;
+    Position_y = 52;
+    Size_x = 500;
+    Size_y = 300;
+    Map_Cell_Size = -1;
+    Axis_Label = "", "";
+    Draw_By_JFree_Chart = Yes;
+    Scale = 0, 0.0, 1000, 100.0, 100, 10.0;
+    ScaleAuto = Yes, Yes;
+    Output_Group_Name = "";
+    Output {
+        Graph_Element_Name = "総距離";
+        Line_Color = 255, 0, 0;
+        Line_Width = 2;
+        Marker_Id = 0;
+        Output_Expression = "(Universe.総距離カウント/(CountAgt(Universe.土地.世帯)^2))/((7*sqr(2)*sqr(countagt(Universe.土地.世帯)))/15)";
+        Expression_Value_Display = No;
+        Effective_Fraction_Figures = 0;
+        Graph_Element_Color = (0, 255, 0);
+    }
+}
+
+
+//-------------------------------------------------------
+// Time Graph Output Definition Division
+//-------------------------------------------------------
+Time_Graph {
+    Font_Name = "Dialog";
+    Font_Char_Set = 81;
+    Font_Size = 12.0;
+    Font_Style = 0;
+    Font_Color = 0, 0, 0;
+    Font_Background_Color = 255, 255, 255;
+    Draw_Timing = Simulation_Step;
+    Draw_Interval = 1;
+    Graph_Name = "a";
+    Title = "";
+    Disable = No;
+    Background_Color = 255, 255, 255;
+    Remarks = Yes;
+    Legend_Pos = Top;
+    FastDraw = No;
+    Position_x = 299;
+    Position_y = 20;
+    Size_x = 500;
+    Size_y = 298;
+    Map_Cell_Size = -1;
+    Axis_Label = "", "";
+    Draw_By_JFree_Chart = Yes;
+    Scale = 0, 0.0, 1000, 100.0, 100, 10.0;
+    ScaleAuto = Yes, Yes;
+    Output_Group_Name = "";
+    Output {
+        Graph_Element_Name = "総距離";
+        Line_Color = 0, 0, 255;
+        Line_Width = 2;
+        Marker_Id = 0;
+        Output_Expression = "(Universe.総距離カウント/(CountAgt(Universe.土地.世帯)^2))/((7*sqr(2)*sqr(countagt(Universe.土地.世帯)))/15)";
+        Expression_Value_Display = No;
+        Effective_Fraction_Figures = 0;
+        Graph_Element_Color = (0, 255, 0);
+    }
+}
+
+
+//-------------------------------------------------------
+// Control Panel Definition Division
+//-------------------------------------------------------
+Control_Panel {
+    Display_Area = 1027, 353, 690, 113;
+    Display_Type = 0;
+    Panel_Item {
+        Item_Type = Slider;
+        Item_Name = "初期世帯数";
+        Display_Area = 0, 0, 0, 0;
+        Font_Name = "";
+        Font_Char_Set = 0;
+        Font_Size = 0.0;
+        Font_Style = 0;
+        Font_Color = 0, 0, 0;
+        Font_Background_Color = 0, 0, 0;
+        Var_Name = "Universe.初期世帯数";
+        Slider_Range_Max = 9;
+        Slider_Value_Min = 1.0;
+        Slider_Value_Step = 1.0;
+        Slider_Value = "0";
+    }
+    Panel_Item {
+        Item_Type = Slider;
+        Item_Name = "増加量";
+        Display_Area = 0, 0, 0, 0;
+        Font_Name = "";
+        Font_Char_Set = 0;
+        Font_Size = 0.0;
+        Font_Style = 0;
+        Font_Color = 0, 0, 0;
+        Font_Background_Color = 0, 0, 0;
+        Var_Name = "Universe.増加量";
+        Slider_Range_Max = 9;
+        Slider_Value_Min = 1.0;
+        Slider_Value_Step = 1.0;
+        Slider_Value = "0";
+    }
+    Panel_Item {
+        Item_Type = Slider;
+        Item_Name = "移動量";
+        Display_Area = 0, 0, 0, 0;
+        Font_Name = "";
+        Font_Char_Set = 0;
+        Font_Size = 0.0;
+        Font_Style = 0;
+        Font_Color = 0, 0, 0;
+        Font_Background_Color = 0, 0, 0;
+        Var_Name = "Universe.移動量";
+        Slider_Range_Max = 9;
+        Slider_Value_Min = 1.0;
+        Slider_Value_Step = 1.0;
+        Slider_Value = "0";
+    }
+    Panel_Item {
+        Item_Type = Slider;
+        Item_Name = "中古住宅マイナス";
+        Display_Area = 0, 0, 0, 0;
+        Font_Name = "";
+        Font_Char_Set = 0;
+        Font_Size = 0.0;
+        Font_Style = 0;
+        Font_Color = 0, 0, 0;
+        Font_Background_Color = 0, 0, 0;
+        Var_Name = "Universe.中古住宅マイナス";
+        Slider_Range_Max = 6;
+        Slider_Value_Min = -1.0;
+        Slider_Value_Step = 1.0;
+        Slider_Value = "1";
+    }
+    Panel_Item {
+        Item_Type = Slider;
+        Item_Name = "階数";
+        Display_Area = 0, 0, 0, 0;
+        Font_Name = "";
+        Font_Char_Set = 0;
+        Font_Size = 0.0;
+        Font_Style = 0;
+        Font_Color = 0, 0, 0;
+        Font_Background_Color = 0, 0, 0;
+        Var_Name = "Universe.上";
+        Slider_Range_Max = 9;
+        Slider_Value_Min = 1.0;
+        Slider_Value_Step = 1.0;
+        Slider_Value = "0";
+    }
+}
+
+
+//-------------------------------------------------------
+// Space Initial Value Definition Divsion
+//-------------------------------------------------------
+Space_Initial {
+}
+
+
+//-------------------------------------------------------
+// Other Miscellaneous Data Definition Division
+//-------------------------------------------------------
+Others_Data {
+    Indent = 4;
+    Rule_Colored = Yes;
+    Rule_LineNo = Yes;
+    Window_Hide_Run = 1;
+    Debug_Position_x = 1066;
+    Debug_Position_y = 126;
+    Debug_Size_x = 400;
+    Debug_Size_y = 200;
+    Console_Position_x = 61;
+    Console_Position_y = 441;
+    Console_Size_x = 768;
+    Console_Size_y = 217;
+    Componen_Tree_Position_x = 1;
+    Componen_Tree_Position_y = 1;
+    Componen_Tree_Size_x = 250;
+    Componen_Tree_Size_y = 400;
+    Console_Background_Color = 16777215;
+    Console_Foreground_Color = 255;
+    Console_DisplayLines_Max = 500;
+    plug_in_module_name = "";
+    Font_Name = "Dialog";
+    Font_Char_Set = 0;
+    Font_Size = 14.0;
+    Font_Style = 0;
+    Font_Color = 0, 0, 0;
+    Font_Background_Color = 0, 0, 0;
+}
+
+
+//-------------------------------------------------------
+// Network Information Definition Division
+//-------------------------------------------------------
+Network_Info {
+    Global_Space_Area = 0, 0, 100, 100;
+    Local_Space_Info {
+    }
+}
+
+
+//-------------------------------------------------------
+// Window Location Definition Division
+//-------------------------------------------------------
+Window_Rectangle {
+    Window_Name = Main_Window, -8, -8, 1936, 1066;
+    Window_Name = Output_Setting_Window, 743, 358, 480, 350;
+    Window_Name = Artisoc_Help_Window, 10, 10, 400, 300;
+}
+
+
+//-------------------------------------------------------
+// Help Favorite Division
+//-------------------------------------------------------
+Help_Favorite {
+}
